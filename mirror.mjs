@@ -278,14 +278,34 @@ const actions = {
 
 // ---------- Auto-start WDA on macOS ----------
 
+// Launch failures that need the user to do something on the phone or Mac. Every launch reinstalls WDA, which
+// also hides the trust entry in Settings for a moment, so these back off instead of retrying right away.
+const WDA_PROBLEMS = [
+  [/not trusted|explicitly trusted/, "Trust the developer on your iPhone: Settings → General → VPN & Device Management → your Apple ID → Trust."],
+  [/cannot be installed on this device|doesn't include the currently selected device/, "This iPhone isn't set up yet. Keep it plugged in and run npm run setup."],
+  [/Developer Mode is (disabled|not enabled)|enable Developer Mode/i, "Turn on Developer Mode on your iPhone: Settings → Privacy & Security → Developer Mode."],
+  [/device is locked|DeviceLocked/i, "Unlock your iPhone."],
+];
+
 let wdaProcess = null;
+let wdaProblem = null;
+let wdaRetryAt = 0;
 function maybeStartWda(udid) {
-  if (wdaProcess || opts["no-autostart"] || MANUAL || process.platform !== "darwin") return;
+  if (wdaProcess || Date.now() < wdaRetryAt || opts["no-autostart"] || MANUAL || process.platform !== "darwin") return;
   if (!fs.existsSync(path.join(ROOT, "vendor/build"))) return;
-  const log = fs.openSync(path.join(ROOT, "vendor/wda.log"), "a");
+  const logPath = path.join(ROOT, "vendor/wda.log");
+  const from = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
+  const log = fs.openSync(logPath, "a");
   console.log(`  starting WebDriverAgent on ${udid} (log: vendor/wda.log)`);
   wdaProcess = spawn("bash", [path.join(ROOT, "scripts/run-wda.sh")], { env: { ...process.env, UDID: udid }, stdio: ["ignore", log, log] });
-  wdaProcess.on("exit", () => (wdaProcess = null, (sid = null)));
+  wdaProcess.on("exit", () => {
+    wdaProcess = null;
+    sid = null;
+    const output = fs.readFileSync(logPath).subarray(from).toString();
+    wdaProblem = WDA_PROBLEMS.find(([re]) => re.test(output))?.[1] ?? null;
+    wdaRetryAt = Date.now() + (wdaProblem ? 30000 : 3000);
+    if (wdaProblem) console.log(`  ${wdaProblem} (retrying in 30 s)`);
+  });
 }
 process.on("exit", () => wdaProcess?.kill());
 
@@ -338,9 +358,12 @@ async function status() {
     }
   }
   const up = (MANUAL || device) && (await wdaUp());
+  if (up) wdaProblem = null;
   if (device && !up) {
     maybeStartWda(device.udid);
-    error = wdaProcess
+    error = wdaProblem
+      ? wdaProblem
+      : wdaProcess
       ? "Starting WebDriverAgent on your iPhone… (keep it unlocked)"
       : "WebDriverAgent isn't running on the iPhone. Run scripts/setup-wda.sh once, then restart.";
   } else if (MANUAL && !up) error = `Can't reach WebDriverAgent at ${WDA}`;
