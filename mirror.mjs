@@ -272,6 +272,7 @@ function maybeStartWda(udid) {
 }
 process.on("exit", () => wdaProcess?.kill());
 process.on("SIGINT", () => process.exit());
+process.on("SIGTERM", () => process.exit()); // the Mac app stops the server this way
 
 // ---------- HTTP server ----------
 

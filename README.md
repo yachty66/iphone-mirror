@@ -49,6 +49,16 @@ This opens http://localhost:7100 and starts WebDriverAgent on the phone automati
 
 The sidebar has Notifications, Control Center, Search, Lock/Wake, volume, Siri, an app launcher, and stream quality (20, 30 or 60 fps).
 
+### Native Mac app
+
+If you'd rather have a window like Apple's iPhone Mirroring than a browser tab:
+
+```bash
+npm run app          # builds "iPhone Mirror.app" and puts it in ~/Applications
+```
+
+You get a phone-shaped window with no browser chrome. Hover over it and a slim bar appears above: drag it to move the window, and it has close/minimize plus Home and App Switcher buttons. Menu shortcuts: ⌘1 Home, ⌘2 App Switcher, ⌘3 Spotlight, ⌘+ / ⌘− / ⌘0 to change the size, ⌘V pastes your clipboard. The app starts the mirror server itself and stops it when you quit. If one is already running, it uses that one instead. The app runs the server from this checkout, so run `npm run app` again if you move the repo.
+
 ### Over WiFi
 
 Once WDA is running, you can point the mirror at the phone's IP and unplug the cable. Xcode needs "Connect via network" enabled for the device so it can keep WDA running.
