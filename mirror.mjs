@@ -265,6 +265,10 @@ const actions = {
   unlock: () => withSession((s) => wda("POST", `/session/${s}/wda/unlock`)),
   launch: ({ bundleId }) => withSession((s) => wda("POST", `/session/${s}/wda/apps/launch`, { bundleId })),
   siri: ({ text }) => withSession((s) => wda("POST", `/session/${s}/wda/siri/activate`, { text })),
+  // Called when the UI opens, so opening the mirror turns automation back on if it was stopped.
+  ensure: async () => {
+    if (!(await automationAllowed())) restartWda();
+  },
   quality: ({ level }) => {
     if (!QUALITY[level]) throw new Error("unknown quality");
     quality = level;
@@ -284,6 +288,27 @@ function maybeStartWda(udid) {
   wdaProcess.on("exit", () => (wdaProcess = null, (sid = null)));
 }
 process.on("exit", () => wdaProcess?.kill());
+
+// Holding both volume buttons on the iPhone stops automation: WDA keeps running but every input fails with
+// XCTest error 41. Restarting WDA asks iOS for automation again (and brings back its "Automation Running" banner).
+const NOT_AUTHORIZED = /Code=41|Not authorized for performing UI testing/;
+
+function restartWda() {
+  console.log("  automation is off on the iPhone, restarting WebDriverAgent");
+  sid = null;
+  if (wdaProcess) wdaProcess.kill();
+  else spawn("pkill", ["-f", "test-without-building.*WebDriverAgent"], { stdio: "ignore" });
+  // The next status poll sees WDA down and starts it again.
+}
+
+// Without automation WDA can't see any app, so the foreground app comes back as pid 0.
+async function automationAllowed() {
+  try {
+    return (await wda("GET", "/wda/activeAppInfo", null, 5000)).value?.pid > 0;
+  } catch {
+    return true; // WDA isn't up yet; status() takes care of starting it
+  }
+}
 process.on("SIGINT", () => process.exit());
 process.on("SIGTERM", () => process.exit()); // the Mac app stops the server this way
 
@@ -349,6 +374,10 @@ const server = http.createServer(async (req, res) => {
       await enqueue(() => actions[name](body));
       return send(res, 200, { ok: true });
     } catch (e) {
+      if (NOT_AUTHORIZED.test(e.message)) {
+        restartWda();
+        return send(res, 503, { ok: false, error: "Automation was off on your iPhone. Turning it back on, try again in a few seconds." });
+      }
       return send(res, 500, { ok: false, error: e.message });
     }
   }

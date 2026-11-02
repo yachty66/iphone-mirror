@@ -193,6 +193,7 @@ screen.addEventListener("load", () => {
 });
 screen.addEventListener("error", () => (connected = false));
 poll();
+fetch("/api/ensure", { method: "POST" }); // turns automation back on if it was stopped on the iPhone
 
 // ---------- Touch: click, long press, drag ----------
 
