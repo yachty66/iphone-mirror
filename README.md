@@ -1,91 +1,41 @@
-# iPhone Mirror
+# iPhone Mirroring EU
 
-Control your iPhone from your Mac in a browser window: see the screen live, click to tap, drag to swipe, scroll, and type with your real keyboard. It's an open alternative to Apple's iPhone Mirroring, and it works in the EU.
+<img src="macos/icon.png" width="128" align="right" />
 
-## How it works
+Control your iPhone from your Mac. It works like Apple's iPhone Mirroring, including in the EU.
 
-```
-Browser UI  ──HTTP──>  mirror.mjs  ──usbmuxd (USB)──>  WebDriverAgent on the iPhone
-   <img> MJPEG stream  <──────────────  screen frames (port 9100)
-   clicks/drags/keys   ──────────────>  W3C touch actions + keyboard (port 8100)
-```
+## Install
 
-- **WebDriverAgent** (Appium's open-source iOS automation agent) runs on the phone as an XCUITest runner. Setup adds a small endpoint to it (`scripts/wda-fast-touch.patch`) that injects touches directly, skipping WDA's per-action app lookups. That makes taps land about 150 ms sooner. It streams the screen as MJPEG and accepts touch and keyboard input. That's the only no-jailbreak way to inject input into iOS.
-- **mirror.mjs** talks to `usbmuxd` directly, the same daemon Finder and Xcode use, to tunnel to the phone over USB. You don't need libimobiledevice, iproxy or Appium. There are no npm dependencies either.
-- Clicks become taps. Drags are replayed with the timing you used, so flicks fling and slow drags drag. Holding gives a long press. Wheel or trackpad scrolling becomes short, controlled swipes. Typing goes straight to the focused text field.
+You need a Mac with Xcode, Node 20+ and an Apple ID (a free one is fine).
 
-## Setup (once, about 10 minutes)
-
-You need a Mac with **Xcode**, **Node 20+**, and a free Apple ID.
-
-1. Open Xcode → Settings → Accounts and add your Apple ID. A free account is fine.
-2. Plug in the iPhone, unlock it and tap **Trust**.
-3. On the iPhone: Settings → Privacy & Security → **Developer Mode** → On (the phone restarts).
+1. Xcode → Settings → Accounts: add your Apple ID.
+2. Plug in your iPhone, unlock it, tap **Trust**.
+3. iPhone: Settings → Privacy & Security → **Developer Mode** → On.
 4. Run:
-   ```bash
-   git clone https://github.com/yachty66/iphone-mirror && cd iphone-mirror
-   npm run setup        # downloads, signs and builds WebDriverAgent for your phone
-   ```
-   If your Team ID can't be detected, pass it in: `scripts/setup-wda.sh ABCDE12345`. It's shown in Xcode → Settings → Accounts.
-5. The first time WDA launches, trust it on the iPhone: Settings → General → VPN & Device Management → your Apple ID → Trust.
+
+```bash
+git clone https://github.com/yachty66/iphone-mirror && cd iphone-mirror
+npm run setup   # builds the helper app for your iPhone
+npm run app     # installs "iPhone Mirroring EU" to ~/Applications
+```
+
+5. Open **iPhone Mirroring EU** and allow Camera and Microphone access when asked.
+6. First launch only: on the iPhone, go to Settings → General → VPN & Device Management → trust your Apple ID.
 
 ## Use
 
-```bash
-npm start
-```
+Click to tap, drag to swipe, scroll to scroll, type to type.
 
-This opens http://localhost:7100 and starts WebDriverAgent on the phone automatically.
-
-| Input | Does |
+| Shortcut | Action |
 | --- | --- |
-| Click | Tap |
-| Click and hold | Long press |
-| Drag | Swipe or drag |
-| Scroll wheel / trackpad | Scroll |
-| Typing | Types into the focused field (Backspace, Enter and Tab work) |
-| ⌘V | Types your Mac clipboard |
-| ⌥H / ⌥J | Home / App Switcher |
+| ⌘1 / ⌘2 / ⌘3 | Home / App Switcher / Spotlight |
+| ⌘V | Paste your Mac clipboard |
+| ⌘+ / ⌘− / ⌘0 | Window size |
 
-The sidebar has Notifications, Control Center, Search, Lock/Wake, volume, Siri, an app launcher, and stream quality (20, 30 or 60 fps).
+Prefer the browser? Run `npm start` and open http://localhost:7100.
 
-### Native Mac app
+## Good to know
 
-If you'd rather have a window like Apple's iPhone Mirroring than a browser tab:
-
-```bash
-npm run app          # builds "iPhone Mirroring EU.app" and puts it in ~/Applications
-```
-
-You get a phone-shaped window with no browser chrome. The app captures the iPhone's screen directly over USB, the way QuickTime does (60 fps, hardware-decoded, much lower latency than the browser's MJPEG stream), and plays the iPhone's sound on your Mac. The first launch asks for Camera and Microphone access: macOS treats the iPhone screen as a camera and its sound as a microphone. If you decline, or the phone is on WiFi, it falls back to the MJPEG stream. While it's capturing, iOS shows a clean status bar (9:41, full battery), just like with QuickTime. Hover over it and a slim bar appears above: drag it to move the window, and it has close/minimize plus Home and App Switcher buttons. Menu shortcuts: ⌘1 Home, ⌘2 App Switcher, ⌘3 Spotlight, ⌘+ / ⌘− / ⌘0 to change the size, ⌘V pastes your clipboard. The app starts the mirror server itself and stops it when you quit. If one is already running, it uses that one instead. The app runs the server from this checkout, so run `npm run app` again if you move the repo.
-
-### Over WiFi
-
-Once WDA is running, you can point the mirror at the phone's IP and unplug the cable. Xcode needs "Connect via network" enabled for the device so it can keep WDA running.
-
-```bash
-node mirror.mjs --wda http://192.168.1.23:8100
-```
-
-### Options
-
-`--port 7100`, `--udid <udid>` (choose between several phones), `--wda-port`, `--mjpeg-port`, `--no-open`, `--no-autostart`, and `node mirror.mjs devices` to list connected phones.
-
-## Limits compared to Apple's version
-
-- The iPhone has to stay **unlocked with the screen on**. Set Auto-Lock to Never while mirroring. iOS only allows a locked, dark screen for Apple's private mirroring APIs.
-- In the browser, video is MJPEG (WDA screenshots at up to 30 fps). The Mac app uses the direct USB capture instead.
-- Touches go through Apple's XCTest event system, which accepts one gesture at a time and acknowledges each about 300 ms after it plays. A single tap shows up in about 200 ms, but very fast tapping or scrolling gets spaced out.
-- No notification mirroring and no drag-and-drop files. Audio only plays in the Mac app.
-- With a free Apple ID the WDA signature expires after **7 days**. Run `npm run setup` again to renew it.
-- Some screens block automation input: the passcode screen, Apple Pay, and some banking apps.
-
-## Development without an iPhone
-
-`test/fake-iphone.mjs` fakes both usbmuxd and WebDriverAgent:
-
-```bash
-node test/fake-iphone.mjs                                   # terminal 1
-USBMUXD_SOCKET_ADDRESS=/tmp/fake-usbmuxd.sock npm start     # terminal 2
-npm test                                                    # end-to-end checks
-```
+- Keep the iPhone unlocked and connected by USB. Setting Auto-Lock to Never helps.
+- With a free Apple ID, run `npm run setup` again every 7 days.
+- The iPhone's sound plays on your Mac while mirroring.
