@@ -36,16 +36,22 @@ BUNDLE="com.$(echo "$TEAM" | tr A-Z a-z).iphonemirror.WebDriverAgentRunner"
 sed -i '' "s/com\.facebook\.WebDriverAgentRunner/$BUNDLE/g" "$WDA/WebDriverAgent.xcodeproj/project.pbxproj"
 
 echo "→ Building for $UDID with team $TEAM (first build takes a few minutes)"
-xcodebuild build-for-testing \
+LOG="$ROOT/vendor/build.log"
+if ! xcodebuild build-for-testing \
   -project "$WDA/WebDriverAgent.xcodeproj" \
   -scheme WebDriverAgentRunner \
   -destination "id=$UDID" \
   -derivedDataPath "$BUILD" \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
-  DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" \
-  | grep -E "error:|warning: .*[Pp]rovision|BUILD|Signing" || true
-
-[ -d "$BUILD/Build/Products" ] && ls "$BUILD/Build/Products"/*.xctestrun >/dev/null 2>&1 || { echo "Build failed. Open vendor/WebDriverAgent/WebDriverAgent.xcodeproj in Xcode to see the signing error."; exit 1; }
+  DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY="Apple Development" >"$LOG" 2>&1; then
+  grep -E "error:" "$LOG" | sed 's/^.*error: /  ! /' | sort -u
+  if grep -q "No Accounts" "$LOG"; then
+    echo "Sign in to Xcode: Xcode → Settings → Accounts → + → Apple ID, then run npm run setup again."
+  else
+    echo "Build failed (full log: vendor/build.log)."
+  fi
+  exit 1
+fi
 
 cat <<MSG
 
