@@ -10,7 +10,7 @@ Browser UI  ──HTTP──>  mirror.mjs  ──usbmuxd (USB)──>  WebDriver
    clicks/drags/keys   ──────────────>  W3C touch actions + keyboard (port 8100)
 ```
 
-- **WebDriverAgent** (Appium's open-source iOS automation agent) runs on the phone as an XCUITest runner. It streams the screen as MJPEG and accepts touch and keyboard input. That's the only no-jailbreak way to inject input into iOS.
+- **WebDriverAgent** (Appium's open-source iOS automation agent) runs on the phone as an XCUITest runner. Setup adds a small endpoint to it (`scripts/wda-fast-touch.patch`) that injects touches directly, skipping WDA's per-action app lookups. That makes taps land about 150 ms sooner. It streams the screen as MJPEG and accepts touch and keyboard input. That's the only no-jailbreak way to inject input into iOS.
 - **mirror.mjs** talks to `usbmuxd` directly, the same daemon Finder and Xcode use, to tunnel to the phone over USB. You don't need libimobiledevice, iproxy or Appium. There are no npm dependencies either.
 - Clicks become taps. Drags are replayed with the timing you used, so flicks fling and slow drags drag. Holding gives a long press. Wheel or trackpad scrolling becomes short, controlled swipes. Typing goes straight to the focused text field.
 
@@ -57,7 +57,7 @@ If you'd rather have a window like Apple's iPhone Mirroring than a browser tab:
 npm run app          # builds "iPhone Mirror.app" and puts it in ~/Applications
 ```
 
-You get a phone-shaped window with no browser chrome. Hover over it and a slim bar appears above: drag it to move the window, and it has close/minimize plus Home and App Switcher buttons. Menu shortcuts: ⌘1 Home, ⌘2 App Switcher, ⌘3 Spotlight, ⌘+ / ⌘− / ⌘0 to change the size, ⌘V pastes your clipboard. The app starts the mirror server itself and stops it when you quit. If one is already running, it uses that one instead. The app runs the server from this checkout, so run `npm run app` again if you move the repo.
+You get a phone-shaped window with no browser chrome. The app captures the iPhone's screen directly over USB, the way QuickTime does (60 fps, hardware-decoded, much lower latency than the browser's MJPEG stream), and plays the iPhone's sound on your Mac. The first launch asks for Camera and Microphone access: macOS treats the iPhone screen as a camera and its sound as a microphone. If you decline, or the phone is on WiFi, it falls back to the MJPEG stream. While it's capturing, iOS shows a clean status bar (9:41, full battery), just like with QuickTime. Hover over it and a slim bar appears above: drag it to move the window, and it has close/minimize plus Home and App Switcher buttons. Menu shortcuts: ⌘1 Home, ⌘2 App Switcher, ⌘3 Spotlight, ⌘+ / ⌘− / ⌘0 to change the size, ⌘V pastes your clipboard. The app starts the mirror server itself and stops it when you quit. If one is already running, it uses that one instead. The app runs the server from this checkout, so run `npm run app` again if you move the repo.
 
 ### Over WiFi
 
@@ -74,8 +74,9 @@ node mirror.mjs --wda http://192.168.1.23:8100
 ## Limits compared to Apple's version
 
 - The iPhone has to stay **unlocked with the screen on**. Set Auto-Lock to Never while mirroring. iOS only allows a locked, dark screen for Apple's private mirroring APIs.
-- Video is MJPEG, not H.264, so expect roughly 100–200 ms latency.
-- No audio forwarding, no notification mirroring, no drag-and-drop files.
+- In the browser, video is MJPEG (WDA screenshots at up to 30 fps). The Mac app uses the direct USB capture instead.
+- Touches go through Apple's XCTest event system, which accepts one gesture at a time and acknowledges each about 300 ms after it plays. A single tap shows up in about 200 ms, but very fast tapping or scrolling gets spaced out.
+- No notification mirroring and no drag-and-drop files. Audio only plays in the Mac app.
 - With a free Apple ID the WDA signature expires after **7 days**. Run `npm run setup` again to renew it.
 - Some screens block automation input: the passcode screen, Apple Pay, and some banking apps.
 

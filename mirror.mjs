@@ -182,7 +182,7 @@ async function session() {
   });
   sid = res.sessionId ?? res.value?.sessionId;
   await wda("POST", `/session/${sid}/appium/settings`, {
-    settings: { ...QUALITY[quality], waitForIdleTimeout: 0, animationCoolOffTimeout: 0 },
+    settings: { ...QUALITY[quality], waitForIdleTimeout: 0, animationCoolOffTimeout: 0, snapshotMaxDepth: 1 },
   }).catch(() => {});
   return sid;
 }
@@ -217,8 +217,21 @@ const enqueue = (fn) => {
 
 const clamp = (v) => Math.min(1, Math.max(0, v));
 
+let fastTouch = true; // false once we learn this WDA build lacks /wda/mirror/touch (see scripts/wda-fast-touch.patch)
+
 // points: [[x, y, ms], ...] with x/y as 0..1 fractions of the screen; end: ms when the finger lifts.
 async function gesture(points, end) {
+  if (fastTouch) {
+    try {
+      // Skips WDA's per-action app lookup and snapshots, so the touch lands ~150 ms sooner than /actions.
+      await wda("POST", "/wda/mirror/touch", { points, end });
+      return;
+    } catch (e) {
+      if (e.code !== "unknown command") throw e;
+      fastTouch = false;
+      console.log("  WDA has no fast touch endpoint; rerun npm run setup for lower latency");
+    }
+  }
   return withSession(async (s) => {
     const { width, height } = await screenSize(s);
     const at = ([x, y]) => ({ x: Math.round(clamp(x) * (width - 1)), y: Math.round(clamp(y) * (height - 1)) });

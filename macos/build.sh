@@ -11,8 +11,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "→ Compiling"
-swiftc -O -swift-version 5 -parse-as-library -framework Cocoa -framework WebKit \
-  "$ROOT/macos/main.swift" -o "$APP/Contents/MacOS/iPhoneMirror"
+swiftc -O -swift-version 5 -parse-as-library -framework Cocoa -framework WebKit -framework AVFoundation -framework CoreMediaIO \
+  "$ROOT"/macos/*.swift -o "$APP/Contents/MacOS/iPhoneMirror"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,6 +28,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSCameraUsageDescription</key><string>iPhone Mirror shows your iPhone's screen by capturing it over USB, like QuickTime does.</string>
+  <key>NSMicrophoneUsageDescription</key><string>iPhone Mirror plays your iPhone's sound on your Mac.</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <key>IMRepoPath</key><string>$ROOT</string>
   <key>IMNodePath</key><string>$NODE</string>

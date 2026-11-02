@@ -1,6 +1,8 @@
 // Native Mac window for iPhone Mirror, styled after Apple's iPhone Mirroring:
 // a phone-shaped window with no chrome, and a slim bar above it that appears on hover.
-// It starts mirror.mjs if it isn't already running and shows the screen in a WKWebView.
+// It starts mirror.mjs if it isn't already running. The screen comes from a direct USB capture of the iPhone
+// (Capture.swift), with a transparent WKWebView on top that turns clicks and keys into touches. If the capture
+// isn't available, the web view shows WebDriverAgent's MJPEG stream instead.
 import Cocoa
 import WebKit
 
@@ -35,7 +37,7 @@ final class HoverView: NSView {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate {
     var window: MirrorWindow!
     var phone: NSView!
     var web: WKWebView!
@@ -45,10 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     var ratio: CGFloat = 390 / 844
     var phoneHeight = defaultPhoneHeight
     var hideBar: DispatchWorkItem?
+    var capture: PhoneCapture?
+    var captureFailed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         buildWindow()
+        startCapture()
         ensureServer()
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -56,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationWillTerminate(_ notification: Notification) {
+        capture?.stop()
         guard let p = server, p.isRunning else { return }
         p.terminate()
         let deadline = Date().addingTimeInterval(3)
@@ -93,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         config.userContentController.add(self, name: "native")
         web = WKWebView(frame: .zero, configuration: config)
         web.setValue(false, forKey: "drawsBackground")
+        web.navigationDelegate = self
         phone.addSubview(web)
 
         bar = DragBar()
@@ -146,6 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         phone.frame = NSRect(x: 0, y: 0, width: w, height: phoneHeight)
         phone.layer?.cornerRadius = w * 0.14 // iPhone screen corner radius relative to its width
         web.frame = phone.bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        capture?.layer.frame = phone.bounds
+        CATransaction.commit()
         bar.frame = NSRect(x: 0, y: phoneHeight + barGap, width: w, height: barHeight)
         // Traffic lights on the left, Home and App Switcher on the right.
         let y = (barHeight - 16) / 2
@@ -189,12 +200,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         })
     }
 
-    // The page reports the stream's real size once the first frame arrives.
-    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let d = message.body as? [String: Any], let w = d["w"] as? Double, let h = d["h"] as? Double, w > 0, h > 0 else { return }
-        let r = CGFloat(w / h)
-        if abs(r - ratio) > 0.002 { ratio = r; resize() }
+    func setAspect(width w: CGFloat, height h: CGFloat) {
+        guard w > 0, h > 0 else { return }
+        if abs(w / h - ratio) > 0.002 { ratio = w / h; resize() }
         window.invalidateShadow()
+    }
+
+    // In MJPEG mode the page reports the stream's real size once the first frame arrives.
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let d = message.body as? [String: Any], let w = d["w"] as? Double, let h = d["h"] as? Double else { return }
+        setAspect(width: w, height: h)
+    }
+
+    // MARK: Video
+
+    func startCapture() {
+        let c = PhoneCapture()
+        c.onSize = { [weak self] size in self?.setAspect(width: size.width, height: size.height) }
+        phone.layer?.insertSublayer(c.layer, at: 0) // underneath the transparent web view
+        c.layer.frame = phone.bounds
+        capture = c
+        c.start { [weak self] ok in
+            guard let self, !ok else { return }
+            NSLog("iPhone Mirror: no direct screen capture, falling back to the MJPEG stream")
+            self.capture?.layer.removeFromSuperlayer()
+            self.capture = nil
+            self.captureFailed = true
+            self.js("startStream()")
+        }
+    }
+
+    // If the capture failed while the page was still loading, switch it to the stream once it's there.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if captureFailed { js("startStream()") }
     }
 
     // MARK: Server
@@ -217,7 +255,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     func waitForServer(tries: Int) {
         probe { up in
-            if up { self.web.load(URLRequest(url: URL(string: "http://localhost:\(port)/?app=1")!)); return }
+            if up {
+                let video = self.captureFailed ? "" : "&video=native"
+                self.web.load(URLRequest(url: URL(string: "http://localhost:\(port)/?app=1\(video)")!))
+                return
+            }
             if tries <= 1 {
                 self.web.loadHTMLString("""
                 <body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box;background:#000;color:#999;font:13px -apple-system">
@@ -264,6 +306,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         js("flush(); api('type', \(json))")
     }
 
+    @objc func toggleAudio(_ item: NSMenuItem) {
+        guard let audio = capture?.audio else { return }
+        audio.volume = audio.volume > 0 ? 0 : 1
+        item.state = audio.volume > 0 ? .on : .off
+    }
+
     @objc func toggleOnTop(_ item: NSMenuItem) {
         window.level = window.level == .floating ? .normal : .floating
         item.state = window.level == .floating ? .on : .off
@@ -302,6 +350,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             item("Larger", #selector(larger), "="),
             item("Smaller", #selector(smaller), "-"),
             item("Actual Size", #selector(actualSize), "0"),
+            .separator(),
+            { let i = item("Play iPhone Audio", #selector(toggleAudio(_:))); i.state = .on; return i }(),
         ])
         menu("Window", [
             NSMenuItem(title: "Minimize", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m"),

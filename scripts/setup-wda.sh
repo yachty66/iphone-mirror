@@ -24,6 +24,13 @@ if [ ! -d "$WDA" ]; then
   git clone --depth 1 https://github.com/appium/WebDriverAgent "$WDA"
 fi
 
+# Fast touch endpoint (/wda/mirror/touch): injects touches without WDA's per-action app lookup and waits.
+if git -C "$WDA" apply --check "$ROOT/scripts/wda-fast-touch.patch" 2>/dev/null; then
+  git -C "$WDA" apply "$ROOT/scripts/wda-fast-touch.patch"
+elif ! git -C "$WDA" apply --reverse --check "$ROOT/scripts/wda-fast-touch.patch" 2>/dev/null; then
+  echo "! Couldn't apply the fast-touch patch to WebDriverAgent; taps will use the slower standard path."
+fi
+
 # Free accounts need a bundle ID nobody else has registered.
 BUNDLE="com.$(echo "$TEAM" | tr A-Z a-z).iphonemirror.WebDriverAgentRunner"
 sed -i '' "s/com\.facebook\.WebDriverAgentRunner/$BUNDLE/g" "$WDA/WebDriverAgent.xcodeproj/project.pbxproj"

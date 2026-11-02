@@ -43,6 +43,9 @@
   body.app #phone { width: 100vw; height: 100vh; padding: 0; border-radius: 0; box-shadow: none; }
   body.app #screen { width: 100%; height: 100%; max-width: none; max-height: none; min-width: 0; min-height: 0; border-radius: 0; object-fit: fill; }
   body.app #overlay { inset: 0; border-radius: 0; }
+  /* Native video (?video=native): the Mac app draws the screen underneath, the page only handles input. */
+  body.native-video #phone { background: transparent; }
+  body.native-video #screen { opacity: 0; }
 </style>
 </head>
 <body>
@@ -126,7 +129,17 @@ const $ = (id) => document.getElementById(id);
 const screen = $("screen");
 const phone = $("phone");
 let connected = false;
-if (new URLSearchParams(location.search).has("app")) document.body.classList.add("app");
+const params = new URLSearchParams(location.search);
+if (params.has("app")) document.body.classList.add("app");
+let nativeVideo = params.get("video") === "native";
+document.body.classList.toggle("native-video", nativeVideo);
+
+// Called by the Mac app if it can't capture the iPhone's screen itself.
+function startStream() {
+  nativeVideo = false;
+  document.body.classList.remove("native-video");
+  if (connected) screen.src = `/stream?${Date.now()}`;
+}
 
 function toast(msg) {
   $("toast").textContent = msg;
@@ -156,7 +169,8 @@ async function poll() {
     $("quality").value = s.quality;
     if (s.ok && !connected) {
       connected = true;
-      screen.src = `/stream?${Date.now()}`;
+      if (nativeVideo) $("overlay").hidden = true;
+      else screen.src = `/stream?${Date.now()}`;
     }
     if (!s.ok) {
       connected = false;
@@ -308,7 +322,7 @@ $("launchBtn").addEventListener("click", () => {
 
 $("quality").addEventListener("change", async (e) => {
   await api("quality", { level: e.target.value });
-  screen.src = `/stream?${Date.now()}`; // reconnect so the new scale applies right away
+  if (!nativeVideo) screen.src = `/stream?${Date.now()}`; // reconnect so the new scale applies right away
 });
 
 // Buttons shouldn't keep focus, otherwise Space/Enter would re-trigger them instead of typing.
