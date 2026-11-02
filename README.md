@@ -54,7 +54,7 @@ The sidebar has Notifications, Control Center, Search, Lock/Wake, volume, Siri, 
 If you'd rather have a window like Apple's iPhone Mirroring than a browser tab:
 
 ```bash
-npm run app          # builds "iPhone Mirror.app" and puts it in ~/Applications
+npm run app          # builds "iPhone Mirroring EU.app" and puts it in ~/Applications
 ```
 
 You get a phone-shaped window with no browser chrome. The app captures the iPhone's screen directly over USB, the way QuickTime does (60 fps, hardware-decoded, much lower latency than the browser's MJPEG stream), and plays the iPhone's sound on your Mac. The first launch asks for Camera and Microphone access: macOS treats the iPhone screen as a camera and its sound as a microphone. If you decline, or the phone is on WiFi, it falls back to the MJPEG stream. While it's capturing, iOS shows a clean status bar (9:41, full battery), just like with QuickTime. Hover over it and a slim bar appears above: drag it to move the window, and it has close/minimize plus Home and App Switcher buttons. Menu shortcuts: ⌘1 Home, ⌘2 App Switcher, ⌘3 Spotlight, ⌘+ / ⌘− / ⌘0 to change the size, ⌘V pastes your clipboard. The app starts the mirror server itself and stops it when you quit. If one is already running, it uses that one instead. The app runs the server from this checkout, so run `npm run app` again if you move the repo.
