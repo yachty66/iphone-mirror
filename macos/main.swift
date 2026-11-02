@@ -303,7 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: ["text": text]),
               let json = String(data: data, encoding: .utf8) else { return }
-        js("flush(); api('type', \(json))")
+        js("typed += (\(json)).text; flush()")
     }
 
     @objc func toggleAudio(_ item: NSMenuItem) {

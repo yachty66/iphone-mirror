@@ -149,7 +149,7 @@ function toast(msg) {
 }
 
 async function api(name, body = {}) {
-  if (name !== "type") flush(); // keep typed text in order with other actions
+  if (name !== "type") flush(true); // keep typed text in order with other actions
   try {
     const res = await fetch(`/api/${name}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const json = await res.json();
@@ -271,12 +271,20 @@ screen.addEventListener("wheel", (e) => {
 // ---------- Keyboard ----------
 
 const inField = () => ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName);
+// iOS takes ~300 ms per typing request no matter how many characters it carries. So the first key goes out
+// right away, and keys typed while a request is in flight pile up and go out together when it returns.
+// force: send now anyway, so pending text stays ahead of a tap or other action that follows it.
 let typed = "";
-function flush() {
-  clearTimeout(flush.t);
+let typing = false;
+function flush(force = false) {
+  if (!typed || (typing && !force)) return;
   const text = typed;
   typed = "";
-  if (text) api("type", { text });
+  typing = true;
+  api("type", { text }).finally(() => {
+    typing = false;
+    flush();
+  });
 }
 
 window.addEventListener("keydown", (e) => {
@@ -289,8 +297,7 @@ window.addEventListener("keydown", (e) => {
   if (ch === null) return;
   e.preventDefault();
   typed += ch;
-  clearTimeout(flush.t);
-  flush.t = setTimeout(flush, 60);
+  flush();
 });
 
 window.addEventListener("paste", (e) => {
@@ -298,8 +305,8 @@ window.addEventListener("paste", (e) => {
   const text = e.clipboardData.getData("text/plain");
   if (text) {
     e.preventDefault();
+    typed += text;
     flush();
-    api("type", { text });
   }
 });
 
