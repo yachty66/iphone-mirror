@@ -14,6 +14,16 @@ echo "→ Compiling"
 swiftc -O -swift-version 5 -parse-as-library -framework Cocoa -framework WebKit -framework AVFoundation -framework CoreMediaIO \
   "$ROOT"/macos/*.swift -o "$APP/Contents/MacOS/iPhoneMirror"
 
+echo "→ Making the icon"
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+swift "$ROOT/macos/tools/make-icon.swift" "$ROOT/macos/icon.png" "$ICONSET/icon_512x512@2x.png"
+for s in 16 32 128 256 512; do
+  sips -z $s $s "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+  sips -z $((s * 2)) $((s * 2)) "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -23,6 +33,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>iPhone Mirroring EU</string>
   <key>CFBundleIdentifier</key><string>com.yachty66.iphonemirror</string>
   <key>CFBundleExecutable</key><string>iPhoneMirror</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
