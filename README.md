@@ -2,7 +2,11 @@
 
 <img src="macos/icon.png" width="128" align="right" />
 
-Control your iPhone from your Mac. It works like Apple's iPhone Mirroring, including in the EU.
+**Getting this in the EU?**
+
+<img src="docs/eu-error.png" width="320" alt="Unable to Connect to iPhone. iPhone Mirroring is not available in your country or region." />
+
+Apple doesn't offer iPhone Mirroring in the EU. This app is the fix: it lets you see and control your iPhone from your Mac, just like iPhone Mirroring, wherever you are.
 
 ## Install
 
